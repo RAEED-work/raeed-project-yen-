@@ -7,7 +7,9 @@ import psutil
 import threading
 import sqlite3
 import requests
-from flask import Flask, render_template
+import csv  # <-- NEW: For generating reports
+import io   # <-- NEW: For generating reports
+from flask import Flask, render_template, Response # <-- NEW: Added Response
 from flask_socketio import SocketIO
 
 # --- V2 ENTERPRISE SETUP ---
@@ -112,14 +114,13 @@ def run_retail_automation():
         pyautogui.press('enter')
         time.sleep(0.5) 
 
-    # 5. VISUAL RPA (Notepad) - EXACT CHANGE APPLIED HERE
+    # 5. VISUAL RPA (Notepad)
     if focus_window('notepad'):
         pyautogui.hotkey('ctrl', 'a')
         time.sleep(0.1)
         pyautogui.press('backspace')
         time.sleep(0.1)
         
-        # Failsafe: Ensures the shift key isn't virtually "stuck"
         pyautogui.keyUp('shift') 
         
         receipt = (
@@ -137,7 +138,6 @@ def run_retail_automation():
             f"     STATUS: SECURED IN SQL      \n"
         )
         
-        # Slowed down from 0.005 to 0.02 to stop the Shift-Key glitch
         pyautogui.write(receipt, interval=0.02)
 
     time.sleep(1.5)
@@ -155,6 +155,23 @@ def bot_loop():
 @app.route('/')
 def dashboard():
     return render_template('index.html')
+
+# --- 📥 UPGRADE 2: GENERATE REPORT ROUTE ---
+@app.route('/download_report')
+def download_report():
+    """Safely converts the SQLite database into a downloadable CSV Excel file."""
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT * FROM transactions")
+    rows = c.fetchall()
+    conn.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Transaction ID', 'Customer Name', 'Quantity', 'Unit Price', 'Total', 'Timestamp'])
+    writer.writerows(rows)
+
+    return Response(output.getvalue(), mimetype="text/csv", headers={"Content-Disposition": "attachment;filename=AutoHeal_Shift_Report.csv"})
 
 if __name__ == "__main__":
     threading.Thread(target=bot_loop, daemon=True).start()
